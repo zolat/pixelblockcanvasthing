@@ -6,6 +6,7 @@ contract PixelCanvas {
     uint256 public constant WIDTH = 160;  // 16:9 ratio
     uint256 public constant HEIGHT = 90;   // 16:9 ratio
     uint256 public constant COOLDOWN_PERIOD = 60; // Fixed 1-minute cooldown
+    uint256 public constant MAX_BATCH_SIZE = 100; // Maximum number of pixels in a batch
     
     // Struct to represent a pixel
     struct Pixel {
@@ -14,6 +15,15 @@ contract PixelCanvas {
         uint8 green;
         uint8 blue;
         uint256 lastUpdated;
+    }
+
+    // Struct for batch updates
+    struct PixelUpdate {
+        uint256 x;
+        uint256 y;
+        uint8 red;
+        uint8 green;
+        uint8 blue;
     }
     
     // Mapping from position (y * WIDTH + x) to pixel data
@@ -27,6 +37,13 @@ contract PixelCanvas {
         uint8 red,
         uint8 green,
         uint8 blue,
+        uint256 timestamp
+    );
+
+    // Event for batch updates
+    event PixelBatchUpdated(
+        address indexed owner,
+        uint256 count,
         uint256 timestamp
     );
     
@@ -57,6 +74,56 @@ contract PixelCanvas {
         
         // Emit event
         emit PixelUpdated(x, y, msg.sender, red, green, blue, block.timestamp);
+    }
+
+    // Function to update multiple pixels at once
+    function setPixelBatch(PixelUpdate[] calldata updates) external {
+        // Check batch size
+        require(updates.length <= MAX_BATCH_SIZE, "Batch size exceeds maximum");
+        require(updates.length > 0, "Batch is empty");
+
+        // Process each update
+        for (uint256 i = 0; i < updates.length; i++) {
+            PixelUpdate memory update = updates[i];
+            
+            // Check coordinates
+            require(update.x < WIDTH, "X coordinate out of bounds");
+            require(update.y < HEIGHT, "Y coordinate out of bounds");
+            
+            // Calculate position
+            uint256 position = update.y * WIDTH + update.x;
+            
+            // Check cooldown period
+            if (pixels[position].lastUpdated > 0) {
+                require(
+                    block.timestamp >= pixels[position].lastUpdated + COOLDOWN_PERIOD,
+                    "Cooldown period not yet elapsed"
+                );
+            }
+            
+            // Update pixel data
+            pixels[position] = Pixel({
+                owner: msg.sender,
+                red: update.red,
+                green: update.green,
+                blue: update.blue,
+                lastUpdated: block.timestamp
+            });
+            
+            // Emit individual pixel update event
+            emit PixelUpdated(
+                update.x,
+                update.y,
+                msg.sender,
+                update.red,
+                update.green,
+                update.blue,
+                block.timestamp
+            );
+        }
+        
+        // Emit batch update event
+        emit PixelBatchUpdated(msg.sender, updates.length, block.timestamp);
     }
     
     // Function to get a pixel's data

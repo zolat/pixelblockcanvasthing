@@ -147,6 +147,71 @@ const PixelCanvasABI = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "x",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "y",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint8",
+            "name": "red",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "green",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "blue",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct PixelCanvas.PixelUpdate[]",
+        "name": "updates",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "setPixelBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "count",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "PixelBatchUpdated",
+    "type": "event"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -195,6 +260,6 @@ const PixelCanvasABI = [
     "name": "PixelUpdated",
     "type": "event"
   }
-] as const;
+];
 
 export default PixelCanvasABI; 

@@ -5,6 +5,8 @@ import PixelCanvas from '@/components/PixelCanvas';
 import ConnectWallet from '@/components/ConnectWallet';
 import ColorPicker from '@/components/ColorPicker';
 import type { ExtendedExternalProvider } from '@/types/ethereum';
+import { UpdateMode, StagedPixel } from '@/types';
+import PixelCanvasABI from '@/utils/PixelCanvasABI';
 
 declare global {
   interface Window {
@@ -16,12 +18,16 @@ export default function Home() {
   const [provider, setProvider] = useState<ethers.providers.Web3Provider | null>(null);
   const [signer, setSigner] = useState<ethers.Signer | null>(null);
   const [account, setAccount] = useState<string | null>(null);
-  const [selectedColor, setSelectedColor] = useState<string>('#FF6B6B');
+  const [selectedColor, setSelectedColor] = useState<string>('#FF0000');
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [colorPickerPosition, setColorPickerPosition] = useState({ x: 0, y: 0 });
   const [isDraggingPicker, setIsDraggingPicker] = useState(false);
   const [dragStartPicker, setDragStartPicker] = useState({ x: 0, y: 0 });
   const [activePanel, setActivePanel] = useState<'color' | 'help' | 'connect'>('color');
+  const [updateMode, setUpdateMode] = useState<UpdateMode>('instant');
+  const [stagedPixels, setStagedPixels] = useState<StagedPixel[]>([]);
+  const [placingPixel, setPlacingPixel] = useState<boolean>(false);
+  const [isCommitHovered, setIsCommitHovered] = useState<boolean>(false);
 
   useEffect(() => {
     const checkConnection = async () => {
@@ -64,6 +70,15 @@ export default function Home() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (placingPixel && updateMode === 'batch') {
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        canvas.dispatchEvent(new Event('commitStagedPixels'));
+      }
+    }
+  }, [placingPixel, updateMode]);
 
   const connectWallet = async () => {
     if (typeof window.ethereum !== 'undefined') {
@@ -117,6 +132,53 @@ export default function Home() {
     setIsDraggingPicker(false);
   };
 
+  const commitStagedPixels = async () => {
+    if (!signer || stagedPixels.length === 0) return;
+
+    try {
+      setPlacingPixel(true);
+      const contract = new ethers.Contract(
+        '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+        PixelCanvasABI,
+        signer
+      );
+
+      const hexToRgb = (hex: string) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16)
+        } : { r: 0, g: 0, b: 0 };
+      };
+
+      // Convert staged pixels to contract format
+      const updates = stagedPixels.map(pixel => {
+        const rgb = hexToRgb(pixel.color);
+        return {
+          x: pixel.x,
+          y: pixel.y,
+          red: rgb.r,
+          green: rgb.g,
+          blue: rgb.b
+        };
+      });
+
+      const tx = await contract.setPixelBatch(updates);
+      await tx.wait();
+
+      // Clear staged pixels after successful transaction
+      setStagedPixels([]);
+    } catch (err) {
+      console.error('Error placing pixels:', err);
+      if (err instanceof Error && err.message.includes('Cooldown period')) {
+        alert('Please wait a moment before placing more pixels.');
+      }
+    } finally {
+      setPlacingPixel(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-blue-900 dark:to-purple-900 relative overflow-hidden">
       <Head>
@@ -145,6 +207,13 @@ export default function Home() {
             signer={signer} 
             selectedColor={selectedColor}
             setSelectedColor={setSelectedColor}
+            updateMode={updateMode}
+            setUpdateMode={setUpdateMode}
+            stagedPixels={stagedPixels}
+            setStagedPixels={setStagedPixels}
+            placingPixel={placingPixel}
+            setPlacingPixel={setPlacingPixel}
+            isCommitHovered={isCommitHovered}
           />
           <div 
             className="absolute z-50 w-64 bg-black/50 rounded-2xl shadow-2xl backdrop-blur-sm border border-white/20 cursor-move"
@@ -154,10 +223,17 @@ export default function Home() {
               left: colorPickerPosition.x || 'auto',
               userSelect: 'none'
             }}
-            onMouseDown={handlePickerMouseDown}
+            onMouseDown={(e) => {
+              if (e.target instanceof HTMLButtonElement) {
+                e.stopPropagation();
+                return;
+              }
+              handlePickerMouseDown(e);
+            }}
             onMouseMove={handlePickerMouseMove}
             onMouseUp={handlePickerMouseUp}
             onMouseLeave={handlePickerMouseUp}
+            onClick={(e) => e.stopPropagation()}
           >
             {isConnected ? (
               <>
@@ -191,6 +267,14 @@ export default function Home() {
                     <ColorPicker
                       selectedColor={selectedColor}
                       setSelectedColor={setSelectedColor}
+                      updateMode={updateMode}
+                      setUpdateMode={setUpdateMode}
+                      stagedPixels={stagedPixels}
+                      setStagedPixels={setStagedPixels}
+                      placingPixel={placingPixel}
+                      setPlacingPixel={setPlacingPixel}
+                      setIsCommitHovered={setIsCommitHovered}
+                      commitStagedPixels={commitStagedPixels}
                     />
                   )}
                   {activePanel === 'help' && (

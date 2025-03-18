@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ColorPickerProps } from '@/types';
+import { ColorPickerProps, UpdateMode } from '@/types';
 
 type PaletteType = 'snes' | 'vivid' | 'greyscale' | 'custom';
 
@@ -48,7 +48,15 @@ const PALETTES: Record<PaletteType, { name: string, colors: string[] }> = {
 
 const ColorPicker: React.FC<ColorPickerProps> = ({
   selectedColor,
-  setSelectedColor
+  setSelectedColor,
+  updateMode,
+  setUpdateMode,
+  stagedPixels,
+  setStagedPixels,
+  placingPixel,
+  setPlacingPixel,
+  setIsCommitHovered,
+  commitStagedPixels
 }) => {
   const [activePalette, setActivePalette] = useState<PaletteType>('snes');
   const [customColors, setCustomColors] = useState<string[]>(DEFAULT_CUSTOM_COLORS);
@@ -92,9 +100,9 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   };
 
   return (
-    <div className="p-3">
+    <div className="space-y-4">
       {/* Palette Selector */}
-      <div className="flex space-x-1 mb-3">
+      <div className="flex space-x-1">
         {(Object.keys(PALETTES) as PaletteType[]).map((paletteKey) => (
           <button
             key={paletteKey}
@@ -111,7 +119,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       </div>
 
       {/* Color Display and Picker */}
-      <div className="flex items-center mb-3 space-x-2">
+      <div className="flex items-center space-x-2">
         <div
           className="w-8 h-8 rounded-lg shadow-lg"
           style={{ 
@@ -164,12 +172,74 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       </div>
 
       {/* Help Text */}
-      <div className="mt-3 px-2 py-1.5 bg-white/5 rounded-lg">
+      <div className="px-2 py-1.5 bg-white/5 rounded-lg">
         <p className="text-xs text-white/70">
           {activePalette === 'custom' 
             ? '🎨 Use color picker for custom colors'
             : '🎨 Click squares to select • Click Save to add to custom palette'}
         </p>
+      </div>
+
+      {/* Pixel Committing Controls */}
+      <div className="space-y-2">
+        {/* Mode Toggle */}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setUpdateMode(updateMode === 'instant' ? 'batch' : 'instant');
+          }}
+          className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            updateMode === 'instant'
+              ? 'bg-blue-500 hover:bg-blue-600 text-white'
+              : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+          }`}
+        >
+          {updateMode === 'instant' ? '⚡ Instant Mode' : '📦 Batch Mode'}
+        </button>
+
+        {/* Batch Controls */}
+        {updateMode === 'batch' && (
+          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+            <div className="text-white text-sm px-2">
+              {stagedPixels.length} / 100 pixels staged
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  await commitStagedPixels();
+                }}
+                onMouseEnter={() => setIsCommitHovered(true)}
+                onMouseLeave={() => setIsCommitHovered(false)}
+                disabled={stagedPixels.length === 0 || placingPixel}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  stagedPixels.length === 0 || placingPixel
+                    ? 'bg-gray-500 cursor-not-allowed'
+                    : 'bg-green-500 hover:bg-green-600'
+                } text-white transition-colors`}
+              >
+                Commit Changes
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setStagedPixels([]);
+                }}
+                disabled={stagedPixels.length === 0 || placingPixel}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  stagedPixels.length === 0 || placingPixel
+                    ? 'bg-gray-500 cursor-not-allowed'
+                    : 'bg-red-500 hover:bg-red-600'
+                } text-white transition-colors`}
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
