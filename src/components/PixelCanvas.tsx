@@ -5,7 +5,7 @@ import PixelCanvasABI from '@/utils/PixelCanvasABI';
 import ColorPicker from '@/components/ColorPicker';
 
 // Contract address - this will be set after deployment
-const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+const CONTRACT_ADDRESS = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
 const CANVAS_WIDTH = 160;
 const CANVAS_HEIGHT = 90;
 const PIXEL_SIZE = 8;
@@ -119,23 +119,27 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
             wsProvider
           );
 
+          // Listen for pixel updates
           wsContract.on("PixelUpdated", (x: number, y: number, owner: string, colorIndex: string, timestamp: number) => {
+            console.log('Pixel update received:', { x, y, colorIndex });
             setPixels(prevData => {
               const newData = [...prevData];
               const index = Number(y) * CANVAS_WIDTH + Number(x);
               newData[index] = {
                 x: Number(x),
                 y: Number(y),
-                color: PALETTE_COLORS[colorIndex] || '#000000',
+                color: PALETTE_COLORS[colorIndex] || '#FFFFFF',
                 lastUpdate: Number(timestamp)
               };
               return newData;
             });
           });
 
+          // Listen for batch updates
           wsContract.on("PixelBatchUpdated", (owner: string, count: number, timestamp: number) => {
-            // The individual PixelUpdated events will handle the updates
             console.log(`Batch update of ${count} pixels by ${owner}`);
+            // Reload the affected portion of the canvas
+            loadCanvasData();
           });
         }
       } catch (err) {
@@ -148,41 +152,61 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
   }, [signer, wsProvider]);
 
   // Load initial canvas data
-  useEffect(() => {
+  const loadCanvasData = async () => {
     if (!contract) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      setLoadingProgress(0);
 
-    const loadCanvasData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        setLoadingProgress(0);
+      const CHUNK_SIZE = 1000; // Load 1000 pixels at a time
+      const totalPixels = CANVAS_WIDTH * CANVAS_HEIGHT;
+      
+      // Initialize all pixels with default values
+      const newPixels: PixelData[] = Array(totalPixels).fill(null).map((_, index) => ({
+        x: index % CANVAS_WIDTH,
+        y: Math.floor(index / CANVAS_WIDTH),
+        color: '#FFFFFF', // Default to white
+        lastUpdate: Date.now()
+      }));
 
-        // Get the entire canvas string
-        const canvasString = await contract.getCanvas() as string;
-        
-        // Convert the string into pixel data
-        const newPixels: PixelData[] = [];
-        for (let y = 0; y < CANVAS_HEIGHT; y++) {
-          for (let x = 0; x < CANVAS_WIDTH; x++) {
-            const index = y * CANVAS_WIDTH + x;
-            const colorIndex = canvasString[index] || '0';
-            newPixels.push({
-              x,
-              y,
-              color: PALETTE_COLORS[colorIndex] || '#000000',
+      for (let start = 0; start < totalPixels; start += CHUNK_SIZE) {
+        const length = Math.min(CHUNK_SIZE, totalPixels - start);
+        try {
+          const canvasString = await contract.getCanvasPortion(start, length);
+          
+          // Convert the string into pixel data
+          for (let i = 0; i < length; i++) {
+            const index = start + i;
+            const colorIndex = canvasString[i] || '7'; // Default to white (7) if no color
+            newPixels[index] = {
+              x: index % CANVAS_WIDTH,
+              y: Math.floor(index / CANVAS_WIDTH),
+              color: PALETTE_COLORS[colorIndex] || '#FFFFFF',
               lastUpdate: Date.now()
-            });
+            };
           }
+          
+          setLoadingProgress(Math.min(100, Math.round((start + length) / totalPixels * 100)));
+          setPixels([...newPixels]); // Update pixels after each chunk
+        } catch (chunkError) {
+          console.error(`Error loading chunk starting at ${start}:`, chunkError);
+          // Continue with next chunk even if one fails
+          continue;
         }
-        setPixels(newPixels);
-        setIsLoading(false);
-      } catch (err) {
-        console.error('Error loading canvas data:', err);
-        setError('Failed to load canvas data. Please try again.');
-        setIsLoading(false);
       }
-    };
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error loading canvas data:', err);
+      setError('Failed to load canvas data. Please try refreshing the page.');
+      setIsLoading(false);
+    }
+  };
 
+  // Initial load
+  useEffect(() => {
     loadCanvasData();
   }, [contract]);
 
@@ -201,6 +225,8 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
     
     // Draw pixels with proper positioning
     pixels.forEach(pixel => {
+      if (!pixel) return; // Skip undefined pixels
+      
       const xPos = pixel.x * PIXEL_SIZE;
       const yPos = pixel.y * PIXEL_SIZE;
       ctx.fillStyle = pixel.color;
@@ -306,20 +332,22 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
       setPlacingPixel(true);
       setError(null);
       
-      const colorIndex = HEX_TO_INDEX[selectedColor.toUpperCase()] || '0';
+      const colorIndex = HEX_TO_INDEX[selectedColor.toUpperCase()] || '7';
       
       const tx = await contract.setPixel(
         hoveredPixel.x,
         hoveredPixel.y,
-        colorIndex
+        colorIndex.toString()
       );
       
       await tx.wait();
       
+      // Update local state with the new pixel
       setPixels(prevData => {
         const newData = [...prevData];
         const index = hoveredPixel.y * CANVAS_WIDTH + hoveredPixel.x;
         
+        // Ensure the pixel data is properly initialized
         newData[index] = {
           x: hoveredPixel.x,
           y: hoveredPixel.y,
@@ -568,11 +596,14 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
   }, []);
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center w-full h-full bg-gray-900 text-white">
-        <p className="text-red-500">{error}</p>
-      </div>
-    );
+    // Only show full-screen error for critical errors, not for cooldown messages
+    if (!error.includes('Cooldown period') && !error.includes('Please wait a moment')) {
+      return (
+        <div className="flex items-center justify-center w-full h-full bg-gray-900 text-white">
+          <p className="text-red-500">{error}</p>
+        </div>
+      );
+    }
   }
 
   return (
