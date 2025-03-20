@@ -8,6 +8,30 @@ import type { ExtendedExternalProvider } from '@/types/ethereum';
 import { UpdateMode, StagedPixel } from '@/types';
 import PixelCanvasABI from '@/utils/PixelCanvasABI';
 
+// Define the 16-color palette with hex values
+const PALETTE_COLORS: { [key: string]: string } = {
+  '0': '#000000', // Black
+  '1': '#FF0000', // Red
+  '2': '#00FF00', // Green
+  '3': '#0000FF', // Blue
+  '4': '#FFFF00', // Yellow
+  '5': '#FF00FF', // Magenta
+  '6': '#00FFFF', // Cyan
+  '7': '#FFFFFF', // White
+  '8': '#808080', // Gray
+  '9': '#FF8000', // Orange
+  'A': '#800000', // Dark Red
+  'B': '#008000', // Dark Green
+  'C': '#000080', // Dark Blue
+  'D': '#808000', // Dark Yellow
+  'E': '#800080', // Dark Magenta
+  'F': '#008080'  // Dark Cyan
+};
+
+// Reverse mapping from hex to index
+const HEX_TO_INDEX: { [key: string]: string } = Object.entries(PALETTE_COLORS)
+  .reduce((acc, [index, hex]) => ({ ...acc, [hex.toUpperCase()]: index }), {});
+
 declare global {
   interface Window {
     ethereum?: ExtendedExternalProvider;
@@ -28,6 +52,7 @@ export default function Home() {
   const [stagedPixels, setStagedPixels] = useState<StagedPixel[]>([]);
   const [placingPixel, setPlacingPixel] = useState<boolean>(false);
   const [isCommitHovered, setIsCommitHovered] = useState<boolean>(false);
+  const [totalEdits, setTotalEdits] = useState<number>(0);
 
   useEffect(() => {
     const checkConnection = async () => {
@@ -79,6 +104,47 @@ export default function Home() {
       }
     }
   }, [placingPixel, updateMode]);
+
+  useEffect(() => {
+    const loadTotalEdits = async () => {
+      if (signer) {
+        try {
+          const contract = new ethers.Contract(
+            '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+            PixelCanvasABI,
+            signer
+          );
+          const total = await contract.totalEdits();
+          setTotalEdits(total.toNumber());
+        } catch (error) {
+          console.error("Error fetching total edits:", error);
+        }
+      }
+    };
+
+    loadTotalEdits();
+
+    // Set up event listeners for updates
+    if (signer) {
+      const contract = new ethers.Contract(
+        '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+        PixelCanvasABI,
+        signer
+      );
+
+      const handlePixelUpdate = () => {
+        loadTotalEdits();
+      };
+
+      contract.on("PixelUpdated", handlePixelUpdate);
+      contract.on("PixelBatchUpdated", handlePixelUpdate);
+
+      return () => {
+        contract.off("PixelUpdated", handlePixelUpdate);
+        contract.off("PixelBatchUpdated", handlePixelUpdate);
+      };
+    }
+  }, [signer]);
 
   const connectWallet = async () => {
     if (typeof window.ethereum !== 'undefined') {
@@ -143,28 +209,12 @@ export default function Home() {
         signer
       );
 
-      const hexToRgb = (hex: string) => {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? {
-          r: parseInt(result[1], 16),
-          g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16)
-        } : { r: 0, g: 0, b: 0 };
-      };
+      // Prepare arrays for batch update
+      const xs = stagedPixels.map(p => p.x);
+      const ys = stagedPixels.map(p => p.y);
+      const colorIndices = stagedPixels.map(p => HEX_TO_INDEX[p.color.toUpperCase()] || '0');
 
-      // Convert staged pixels to contract format
-      const updates = stagedPixels.map(pixel => {
-        const rgb = hexToRgb(pixel.color);
-        return {
-          x: pixel.x,
-          y: pixel.y,
-          red: rgb.r,
-          green: rgb.g,
-          blue: rgb.b
-        };
-      });
-
-      const tx = await contract.setPixelBatch(updates);
+      const tx = await contract.setPixelBatch(xs, ys, colorIndices);
       await tx.wait();
 
       // Clear staged pixels after successful transaction
@@ -187,6 +237,24 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
+
+      {/* Stats Bar */}
+      <div className="fixed top-0 left-0 right-0 bg-black/50 backdrop-blur-sm p-2 flex justify-between items-center z-50">
+        <div className="text-white/80 text-sm">
+          {isConnected ? (
+            <span>
+              Connected: {account?.slice(0, 6)}...{account?.slice(-4)} | Total Edits: {totalEdits.toLocaleString()}
+            </span>
+          ) : (
+            <span>Not connected</span>
+          )}
+        </div>
+        <ConnectWallet
+          connectWallet={connectWallet}
+          isConnected={isConnected}
+          account={account}
+        />
+      </div>
 
       {/* Tiled App Name Background */}
       <div className="absolute inset-0 opacity-[0.02] pointer-events-none select-none">

@@ -1,190 +1,45 @@
 const PixelCanvasABI = [
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "x",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "y",
-        "type": "uint256"
-      }
-    ],
-    "name": "canUpdatePixel",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
   },
   {
+    "anonymous": false,
     "inputs": [
       {
+        "indexed": true,
         "internalType": "uint256",
         "name": "x",
         "type": "uint256"
       },
       {
+        "indexed": true,
         "internalType": "uint256",
         "name": "y",
         "type": "uint256"
-      }
-    ],
-    "name": "getPixel",
-    "outputs": [
+      },
       {
+        "indexed": true,
         "internalType": "address",
-        "name": "",
+        "name": "owner",
         "type": "address"
       },
       {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
+        "indexed": false,
+        "internalType": "string",
+        "name": "color",
+        "type": "string"
       },
       {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      },
-      {
+        "indexed": false,
         "internalType": "uint256",
-        "name": "",
+        "name": "timestamp",
         "type": "uint256"
       }
     ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256[]",
-        "name": "positions",
-        "type": "uint256[]"
-      }
-    ],
-    "name": "getPixelBatch",
-    "outputs": [
-      {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "owner",
-            "type": "address"
-          },
-          {
-            "internalType": "uint8",
-            "name": "red",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint8",
-            "name": "green",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint8",
-            "name": "blue",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint256",
-            "name": "lastUpdated",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct PixelCanvas.Pixel[]",
-        "name": "",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "x",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "y",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint8",
-        "name": "red",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint8",
-        "name": "green",
-        "type": "uint8"
-      },
-      {
-        "internalType": "uint8",
-        "name": "blue",
-        "type": "uint8"
-      }
-    ],
-    "name": "setPixel",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "x",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "y",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint8",
-            "name": "red",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint8",
-            "name": "green",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint8",
-            "name": "blue",
-            "type": "uint8"
-          }
-        ],
-        "internalType": "struct PixelCanvas.PixelUpdate[]",
-        "name": "updates",
-        "type": "tuple[]"
-      }
-    ],
-    "name": "setPixelBatch",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "name": "PixelUpdated",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -212,53 +67,119 @@ const PixelCanvasABI = [
     "type": "event"
   },
   {
-    "anonymous": false,
+    "inputs": [],
+    "name": "getCanvas",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
-        "indexed": true,
         "internalType": "uint256",
         "name": "x",
         "type": "uint256"
       },
       {
-        "indexed": true,
+        "internalType": "uint256",
+        "name": "y",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPixel",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "positions",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "getPixelBatch",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "x",
+        "type": "uint256"
+      },
+      {
         "internalType": "uint256",
         "name": "y",
         "type": "uint256"
       },
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
+        "internalType": "string",
+        "name": "colorIndex",
+        "type": "string"
+      }
+    ],
+    "name": "setPixel",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "xs",
+        "type": "uint256[]"
       },
       {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "red",
-        "type": "uint8"
+        "internalType": "uint256[]",
+        "name": "ys",
+        "type": "uint256[]"
       },
       {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "green",
-        "type": "uint8"
-      },
+        "internalType": "string[]",
+        "name": "colorIndices",
+        "type": "string[]"
+      }
+    ],
+    "name": "setPixelBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalEdits",
+    "outputs": [
       {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "blue",
-        "type": "uint8"
-      },
-      {
-        "indexed": false,
         "internalType": "uint256",
-        "name": "timestamp",
+        "name": "",
         "type": "uint256"
       }
     ],
-    "name": "PixelUpdated",
-    "type": "event"
+    "stateMutability": "view",
+    "type": "function"
   }
 ];
 

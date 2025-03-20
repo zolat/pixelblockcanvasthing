@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ethers } from 'ethers';
+import type { PixelCanvasProps, PixelData, Position, StagedPixel, PixelUpdate } from '@/types';
 import PixelCanvasABI from '@/utils/PixelCanvasABI';
-import { PixelCanvasProps, PixelData, Position, StagedPixel, PixelUpdate, UpdateMode, Pixel } from '@/types';
 import ColorPicker from '@/components/ColorPicker';
 
 // Contract address - this will be set after deployment
@@ -14,6 +14,30 @@ const MAX_BATCH_SIZE = 100;
 // Add WebSocket RPC URL
 const WS_RPC_URL = "ws://127.0.0.1:8545";
 const HTTP_RPC_URL = "http://127.0.0.1:8545";
+
+// Define the 16-color palette with hex values
+const PALETTE_COLORS: { [key: string]: string } = {
+  '0': '#000000', // Black
+  '1': '#FF0000', // Red
+  '2': '#00FF00', // Green
+  '3': '#0000FF', // Blue
+  '4': '#FFFF00', // Yellow
+  '5': '#FF00FF', // Magenta
+  '6': '#00FFFF', // Cyan
+  '7': '#FFFFFF', // White
+  '8': '#808080', // Gray
+  '9': '#FF8000', // Orange
+  'A': '#800000', // Dark Red
+  'B': '#008000', // Dark Green
+  'C': '#000080', // Dark Blue
+  'D': '#808000', // Dark Yellow
+  'E': '#800080', // Dark Magenta
+  'F': '#008080'  // Dark Cyan
+};
+
+// Reverse mapping from hex to index
+const HEX_TO_INDEX: { [key: string]: string } = Object.entries(PALETTE_COLORS)
+  .reduce((acc, [index, hex]) => ({ ...acc, [hex.toUpperCase()]: index }), {});
 
 const PixelCanvas: React.FC<PixelCanvasProps> = ({ 
   signer, 
@@ -31,7 +55,7 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
   const [contract, setContract] = useState<ethers.Contract | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
-  const [pixelData, setPixelData] = useState<PixelData[]>([]);
+  const [pixels, setPixels] = useState<PixelData[]>([]);
   const [hoveredPixel, setHoveredPixel] = useState<Position | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [position, setPosition] = useState<Position>({ x: 0, y: 0 });
@@ -95,20 +119,16 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
             wsProvider
           );
 
-          wsContract.on("PixelUpdated", (x: number, y: number, owner: string, red: number, green: number, blue: number, timestamp: number) => {
-            setPixelData(prevData => {
+          wsContract.on("PixelUpdated", (x: number, y: number, owner: string, colorIndex: string, timestamp: number) => {
+            setPixels(prevData => {
               const newData = [...prevData];
               const index = Number(y) * CANVAS_WIDTH + Number(x);
-              
               newData[index] = {
-                ...newData[index],
                 x: Number(x),
                 y: Number(y),
-                color: `rgb(${red}, ${green}, ${blue})`,
-                owner,
-                lastUpdated: Number(timestamp)
+                color: PALETTE_COLORS[colorIndex] || '#000000',
+                lastUpdate: Number(timestamp)
               };
-              
               return newData;
             });
           });
@@ -137,34 +157,24 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
         setError(null);
         setLoadingProgress(0);
 
-        const positions = Array.from(
-          { length: CANVAS_HEIGHT * CANVAS_WIDTH },
-          (_, i) => i
-        );
-
-        const batchSize = 500;
-        const pixelDataArray: Pixel[] = [];
-
-        for (let i = 0; i < positions.length; i += batchSize) {
-          const batch = positions.slice(i, i + batchSize);
-          const batchData = await contract.getPixelBatch(batch);
-          pixelDataArray.push(...batchData);
-
-          const progress = Math.min(100, Math.floor((i + batchSize) / positions.length * 100));
-          setLoadingProgress(progress);
+        // Get the entire canvas string
+        const canvasString = await contract.getCanvas() as string;
+        
+        // Convert the string into pixel data
+        const newPixels: PixelData[] = [];
+        for (let y = 0; y < CANVAS_HEIGHT; y++) {
+          for (let x = 0; x < CANVAS_WIDTH; x++) {
+            const index = y * CANVAS_WIDTH + x;
+            const colorIndex = canvasString[index] || '0';
+            newPixels.push({
+              x,
+              y,
+              color: PALETTE_COLORS[colorIndex] || '#000000',
+              lastUpdate: Date.now()
+            });
+          }
         }
-
-        const formattedData: PixelData[] = pixelDataArray.map((pixel, index) => ({
-          x: index % CANVAS_WIDTH,
-          y: Math.floor(index / CANVAS_WIDTH),
-          owner: pixel.owner,
-          color: pixel.red > 0 || pixel.green > 0 || pixel.blue > 0
-            ? `rgb(${pixel.red}, ${pixel.green}, ${pixel.blue})`
-            : null,
-          lastUpdated: Number(pixel.lastUpdated)
-        }));
-
-        setPixelData(formattedData);
+        setPixels(newPixels);
         setIsLoading(false);
       } catch (err) {
         console.error('Error loading canvas data:', err);
@@ -189,6 +199,37 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
+    // Draw pixels with proper positioning
+    pixels.forEach(pixel => {
+      const xPos = pixel.x * PIXEL_SIZE;
+      const yPos = pixel.y * PIXEL_SIZE;
+      ctx.fillStyle = pixel.color;
+      ctx.fillRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
+    });
+
+    // Draw staged pixels with a special effect
+    stagedPixels.forEach(pixel => {
+      const xPos = pixel.x * PIXEL_SIZE;
+      const yPos = pixel.y * PIXEL_SIZE;
+      
+      // Draw staged pixel with full opacity
+      ctx.fillStyle = pixel.color;
+      ctx.fillRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
+      
+      // Add a border to indicate it's staged, with enhanced highlight when commit is hovered
+      ctx.strokeStyle = isCommitHovered ? '#FFA500' : '#FFD700';
+      ctx.lineWidth = isCommitHovered ? 2 : 1;
+      ctx.strokeRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
+      
+      // Add a glow effect when commit is hovered
+      if (isCommitHovered) {
+        ctx.shadowColor = '#FFA500';
+        ctx.shadowBlur = 4;
+        ctx.strokeRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
+        ctx.shadowBlur = 0;
+      }
+    });
+    
     // Draw grid with proper alignment
     ctx.strokeStyle = '#EEEEEE';
     ctx.lineWidth = 0.5;
@@ -211,39 +252,6 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
       ctx.stroke();
     }
     
-    // Draw pixels with proper positioning
-    pixelData.forEach(pixel => {
-      if (pixel.color) {
-        const xPos = pixel.x * PIXEL_SIZE;
-        const yPos = pixel.y * PIXEL_SIZE;
-        ctx.fillStyle = pixel.color;
-        ctx.fillRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
-      }
-    });
-
-    // Draw staged pixels with a special effect
-    stagedPixels.forEach(pixel => {
-      const xPos = pixel.x * PIXEL_SIZE;
-      const yPos = pixel.y * PIXEL_SIZE;
-      
-      // Draw staged pixel with full opacity
-      ctx.fillStyle = pixel.color;
-      ctx.fillRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
-      
-      // Add a border to indicate it's staged, with enhanced highlight when commit is hovered
-      ctx.strokeStyle = isCommitHovered ? '#FFA500' : '#FFD700'; // Orange when hovered, gold normally
-      ctx.lineWidth = isCommitHovered ? 2 : 1; // Thicker border when hovered
-      ctx.strokeRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
-      
-      // Add a glow effect when commit is hovered
-      if (isCommitHovered) {
-        ctx.shadowColor = '#FFA500';
-        ctx.shadowBlur = 4;
-        ctx.strokeRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
-        ctx.shadowBlur = 0; // Reset shadow for other elements
-      }
-    });
-    
     // Draw hovered pixel with proper positioning
     if (hoveredPixel) {
       const xPos = hoveredPixel.x * PIXEL_SIZE;
@@ -259,7 +267,7 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
         ctx.fillRect(xPos, yPos, PIXEL_SIZE, PIXEL_SIZE);
       }
     }
-  }, [pixelData, hoveredPixel, selectedColor, isLoading, stagedPixels, isCommitHovered]);
+  }, [pixels, hoveredPixel, selectedColor, isLoading, stagedPixels, isCommitHovered]);
 
   const handleCanvasClick = async (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isReadOnly) {
@@ -269,26 +277,22 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
 
     if (!contract || !hoveredPixel || placingPixel) return;
 
-    // Stop event propagation and prevent default behavior
     e.stopPropagation();
     e.preventDefault();
 
     // Check if pixel is already staged
     const isStaged = stagedPixels.some(p => p.x === hoveredPixel.x && p.y === hoveredPixel.y);
     if (isStaged) {
-      // Remove from staged pixels
       setStagedPixels(stagedPixels.filter(p => p.x !== hoveredPixel.x || p.y !== hoveredPixel.y));
       return;
     }
     
     if (updateMode === 'batch') {
-      // Check batch size limit
       if (stagedPixels.length >= MAX_BATCH_SIZE) {
         setError(`Cannot stage more than ${MAX_BATCH_SIZE} pixels at once`);
         return;
       }
       
-      // Add to staged pixels
       setStagedPixels([...stagedPixels, {
         x: hoveredPixel.x,
         y: hoveredPixel.y,
@@ -302,35 +306,25 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
       setPlacingPixel(true);
       setError(null);
       
-      const hexToRgb = (hex: string) => {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? {
-          r: parseInt(result[1], 16),
-          g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16)
-        } : { r: 0, g: 0, b: 0 };
-      };
-      
-      const rgb = hexToRgb(selectedColor);
+      const colorIndex = HEX_TO_INDEX[selectedColor.toUpperCase()] || '0';
       
       const tx = await contract.setPixel(
         hoveredPixel.x,
         hoveredPixel.y,
-        rgb.r,
-        rgb.g,
-        rgb.b
+        colorIndex
       );
       
       await tx.wait();
       
-      setPixelData(prevData => {
+      setPixels(prevData => {
         const newData = [...prevData];
         const index = hoveredPixel.y * CANVAS_WIDTH + hoveredPixel.x;
         
         newData[index] = {
-          ...newData[index],
+          x: hoveredPixel.x,
+          y: hoveredPixel.y,
           color: selectedColor,
-          lastUpdated: Math.floor(Date.now() / 1000)
+          lastUpdate: Date.now()
         };
         
         return newData;
@@ -342,7 +336,6 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
       let errorMessage = 'Failed to place pixel. Please try again.';
       
       if (err instanceof Error) {
-        // Check for common MetaMask errors
         if (err.message.includes('user rejected transaction')) {
           errorMessage = 'Transaction cancelled. No worries, you can try again when ready! 😊';
         } else if (err.message.includes('insufficient funds')) {
@@ -364,42 +357,27 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
       setPlacingPixel(true);
       setError(null);
 
-      const hexToRgb = (hex: string) => {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? {
-          r: parseInt(result[1], 16),
-          g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16)
-        } : { r: 0, g: 0, b: 0 };
-      };
+      // Prepare arrays for batch update
+      const xs = stagedPixels.map(p => p.x);
+      const ys = stagedPixels.map(p => p.y);
+      const colorIndices = stagedPixels.map(p => HEX_TO_INDEX[p.color.toUpperCase()] || '0');
 
-      // Convert staged pixels to contract format
-      const updates: PixelUpdate[] = stagedPixels.map(pixel => {
-        const rgb = hexToRgb(pixel.color);
-        return {
-          x: pixel.x,
-          y: pixel.y,
-          red: rgb.r,
-          green: rgb.g,
-          blue: rgb.b
-        };
-      });
-
-      console.log('Sending batch update:', updates);
-      const tx = await contract.setPixelBatch(updates);
+      console.log('Sending batch update:', { xs, ys, colorIndices });
+      const tx = await contract.setPixelBatch(xs, ys, colorIndices);
       console.log('Transaction sent:', tx.hash);
       await tx.wait();
       console.log('Transaction confirmed');
 
       // Update local state after successful transaction
-      setPixelData(prevData => {
+      setPixels(prevData => {
         const newData = [...prevData];
         stagedPixels.forEach(pixel => {
           const index = pixel.y * CANVAS_WIDTH + pixel.x;
           newData[index] = {
-            ...newData[index],
+            x: pixel.x,
+            y: pixel.y,
             color: pixel.color,
-            lastUpdated: Math.floor(Date.now() / 1000)
+            lastUpdate: Math.floor(Date.now() / 1000)
           };
         });
         return newData;
@@ -588,6 +566,14 @@ const PixelCanvas: React.FC<PixelCanvasProps> = ({
       if (zoomOutInterval.current) clearInterval(zoomOutInterval.current);
     };
   }, []);
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center w-full h-full bg-gray-900 text-white">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">

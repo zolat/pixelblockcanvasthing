@@ -1,41 +1,24 @@
 import { ethers } from 'ethers';
 
-export interface Pixel {
-  owner: string;
-  red: number;
-  green: number;
-  blue: number;
-  lastUpdated: number;
-}
-
-export interface PixelData {
-  x: number;
-  y: number;
-  owner: string;
-  color: string | null;
-  lastUpdated: number;
-}
+export type UpdateMode = 'instant' | 'batch';
 
 export interface Position {
   x: number;
   y: number;
 }
 
-export interface StagedPixel {
-  x: number;
-  y: number;
+export interface StagedPixel extends Position {
   color: string;
 }
 
-export interface PixelUpdate {
-  x: number;
-  y: number;
-  red: number;
-  green: number;
-  blue: number;
+export interface PixelData extends Position {
+  color: string;
+  lastUpdate: number;
 }
 
-export type UpdateMode = 'instant' | 'batch';
+export interface PixelUpdate extends Position {
+  colorIndex: string;
+}
 
 export interface PixelCanvasProps {
   signer: ethers.Signer | null;
@@ -50,12 +33,6 @@ export interface PixelCanvasProps {
   isCommitHovered: boolean;
 }
 
-export interface ConnectWalletProps {
-  connectWallet: () => Promise<void>;
-  isConnected: boolean;
-  account: string | null;
-}
-
 export interface ColorPickerProps {
   selectedColor: string;
   setSelectedColor: (color: string) => void;
@@ -67,4 +44,14 @@ export interface ColorPickerProps {
   setPlacingPixel: (placing: boolean) => void;
   setIsCommitHovered: (hovered: boolean) => void;
   commitStagedPixels: () => Promise<void>;
-} 
+}
+
+export interface ColorMap {
+  [key: string]: string;
+}
+
+export interface ExtendedExternalProvider extends ethers.providers.ExternalProvider {
+  selectedAddress?: string;
+  on?: (event: string, callback: (...args: any[]) => void) => void;
+  removeListener?: (event: string, callback: (...args: any[]) => void) => void;
+}
